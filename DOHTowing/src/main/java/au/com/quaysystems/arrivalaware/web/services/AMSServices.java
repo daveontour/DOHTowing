@@ -25,9 +25,7 @@ import au.com.quaysystems.arrivalaware.web.ws.ArrayOfLookupCode;
 import au.com.quaysystems.arrivalaware.web.ws.CodeContext;
 import au.com.quaysystems.arrivalaware.web.ws.FlightId;
 import au.com.quaysystems.arrivalaware.web.ws.FlightKind;
-import au.com.quaysystems.arrivalaware.web.ws.GetAirports;
 import au.com.quaysystems.arrivalaware.web.ws.GetFlight;
-import au.com.quaysystems.arrivalaware.web.ws.GetFlights;
 import au.com.quaysystems.arrivalaware.web.ws.LookupCode;
 import au.com.quaysystems.arrivalaware.web.ws.ObjectFactory;
 
@@ -88,28 +86,12 @@ public class AMSServices {
 	private String stripNS(String xml) {
     	return xml.replaceAll("xmlns(.*?)=(\".*?\")", "");
 	}
-	public String getFlights(int fromHours, int toHours) throws DatatypeConfigurationException, JAXBException {
 
-		GetFlights request = new GetFlights();
-		request.setSessionToken(this.token);
-		request.setAirport(this.airport);
-		request.setAirportIdentifierType(this.apType);
-
-		DateTime dt = new DateTime();
-
-		DateTime f = new DateTime(dt.plusMinutes(fromHours));
-		DateTime t = new DateTime(dt.plusMinutes(toHours));
-		XMLGregorianCalendar from = DatatypeFactory.newInstance().newXMLGregorianCalendar(f.toGregorianCalendar());
-		XMLGregorianCalendar to = DatatypeFactory.newInstance().newXMLGregorianCalendar(t.toGregorianCalendar());
-
-		request.setFrom(from);
-		request.setTo(to);
-		
-		return stripNS(callWebService("http://www.sita.aero/ams6-xml-api-webservice/IAMSIntegrationService/GetFlights", request));
-	}
 	public String getFlight( String id) throws DatatypeConfigurationException, JAXBException {
 
 	//	String id = "6E1713@2019-08-01T09:00A";
+		
+		// id is in the form of the descriptor on the Towing messages
 		
 		FlightId fltID = new FlightId();
 		
@@ -137,6 +119,8 @@ public class AMSServices {
 		}
 		
 		LookupCode apLookupCode = new LookupCode();
+		
+		// Specific to Doha
 		apLookupCode.setValueField("OTHH");
 		apLookupCode.setCodeContextField(CodeContext.ICAO);
 		ArrayOfLookupCode aplc = new ArrayOfLookupCode();

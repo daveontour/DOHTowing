@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
+import au.com.quaysystems.arrivalaware.web.mq.MReceiver;
 import au.com.quaysystems.arrivalaware.web.services.AMSServices;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -83,6 +84,35 @@ public class TowContextListenerBase implements ServletContextListener {
 		}		
 	}
 
+	public MReceiver connectToMQ(String queue) {
+		//Try connection to the IBMMQ Queue until number of retries exceeded
+		
+		boolean connectionOK = false;
+		int tries = 0;
+		MReceiver recv = null;
+		do {
+			try {
+				tries = tries + 1;
+				recv = new MReceiver(queue, host, qm, channel,  port,  user,  pass);
+				connectionOK = true;
+				tries = 0;
+			} catch (Exception ex) {
+				log.error(String.format("Error connection to source queue: Error Message %s ",ex.getMessage()));
+				connectionOK = false;
+				try {
+					Thread.sleep(2000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		} while (!connectionOK  && (tries < retriesIBMMQ || retriesIBMMQ == 0));
+		
+		if (connectionOK) {
+			return recv;
+		} else {
+			return null;
+		}
+	}
 
 	public String getRegistration(String notif) {
 		

@@ -34,6 +34,34 @@ import au.com.quaysystems.arrivalaware.web.mq.MReceiver;
 import au.com.quaysystems.arrivalaware.web.mq.MSender;
 import ch.qos.logback.classic.Logger;
 
+/*
+ * Two Purposes:
+ * 
+ * 1. Listen for incoming request on the input queue for Tows within a specificed period
+ * 2. Schedule the daily resync.
+ * 
+ * Also does the sync on startup.
+ * 
+ * Towings are retrieved using the AMS RESTAPI Server.
+ * The customer required registration of the aircraft in the response, so flight descriptor
+ * information in the towing is extracted and used with the AMS Web Services to get the flight for each  of 
+ * the tow records. 
+ * 
+ * Uses method in the base class to extract flight descriptor for towing message and get registration for AMS
+ * 
+ * Incoming messages may have a correlationID, which is returned in the response
+ * Incoming messages are not parsed or checked for validity
+ * 
+ * Sync pushes have an element in the header to indicate a push. 
+ * 
+ * The handling and construction of XML documents is inelegant. Regex is used to extract values rather 
+ * than a parser. Elements are added by String substitution. This was deliberate to try keep it as light-weight
+ * as possible. 
+ * 
+ * One exception to the above is the use of BaseX FLWOR queries to get the individual tow events for <ArrayOfTowing>
+ * 
+ */
+
 @WebListener
 public class RequestListener extends TowContextListenerBase {
 
@@ -113,8 +141,6 @@ public class RequestListener extends TowContextListenerBase {
 		t.setName("Request Process");
 		t.start();
 		log.info("<=== Request Listner Loop Started");
-
-		monitor(this.monitorPeriod);
 	}
 	
 	public void dailyRefresh() {
@@ -126,11 +152,11 @@ public class RequestListener extends TowContextListenerBase {
 				log.info("DAILY REFRESH TASK - START");
 				try {
 					getAndSendTows();
+					log.info("DAILY REFRESH TASK - COMPLETE");
 				} catch (Exception e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
+					log.error("DAILY REFRESH TASK - UNSUCCESSFUL");
 				}
-				log.info("DAILY REFRESH TASK - COMPLETE");
 			}
 		};
 		
@@ -156,8 +182,6 @@ public class RequestListener extends TowContextListenerBase {
 		);
 
 		log.info("<=== Daily Sync Scheduled at: "+sched.toDate().toString());
-
-		
 	}
 	
 	public boolean getAndSendTows() throws Exception{
@@ -183,27 +207,6 @@ public class RequestListener extends TowContextListenerBase {
 			return false;
 		}
 	}
-
-	public void monitor(long period){
-
-		log.info("===> Start Request Listner Monitor");
-		TimerTask repeatedTask = new TimerTask() {
-			public void run() {
-				if (t.isAlive()) {
-					log.info("Tow Request Processor thread active");
-				} else {
-					log.error("Tow Request Processor thread is not active");
-				}
-			}
-		};
-		Timer timer = new Timer("Requst Monitor");
-		long delay  = 5000L;
-		if (period > 0) {
-			timer.scheduleAtFixedRate(repeatedTask, delay, period);
-		}
-		log.info("<=== Request Listner Monitor Starteted");
-
-	}
 	
 	public String getTows(String from, String to) throws ClientProtocolException, IOException {
 		
@@ -219,10 +222,9 @@ public class RequestListener extends TowContextListenerBase {
 		int statusCode = response.getStatusLine().getStatusCode();
 
 		if (statusCode == HttpStatus.SC_OK) {
-			log.info("GET OK");
 			return EntityUtils.toString(response.getEntity());
 		} else {
-			log.info("GET FAILURE");
+			log.error("GET FAILURE");
 			return "<Status>Failed</Failed>";
 		}				    
 	}
@@ -250,30 +252,9 @@ public class RequestListener extends TowContextListenerBase {
 		public void run() {
 			
 			do {
-				boolean connectionOK = false;
-				int tries = 0;
-				MReceiver recv = null;
-
-				//Try connection to the IBMMQ Queue until number of retries exceeded
-				do {
-					try {
-						tries = tries + 1;
-						recv = new MReceiver(ibminqueue, host, qm, channel,  port,  user,  pass);
-						connectionOK = true;
-						tries = 0;
-					} catch (Exception ex) {
-						log.error(String.format("Error connection to source queue: Error Message %s ",ex.getMessage()));
-						connectionOK = false;
-						try {
-							Thread.sleep(2000);
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}
-					}
-				} while (!connectionOK  && (tries < retriesIBMMQ || retriesIBMMQ == 0));
-
-				// Number of retries exceeded
-				if (!connectionOK) {
+				
+				MReceiver recv = connectToMQ(ibminqueue);
+				if (recv == null) {
 					log.error(String.format("Exceeded IBM MQ connect retry limit {%s}. Exiting", retriesIBMMQ));
 					return;
 				}
@@ -291,11 +272,11 @@ public class RequestListener extends TowContextListenerBase {
 							message = recv.mGet(msgRecvTimeout, true);
 						} catch (MQException ex) {
 							if ( ex.completionCode == 2 && ex.reasonCode == MQConstants.MQRC_NO_MSG_AVAILABLE) {
-								log.info("No Request Messages");
+								log.trace("No Request Messages");
 								continue;
 							}
 						}
-						log.info("Request Message Received");
+						log.trace("Request Message Received");
 						message = message.substring(message.indexOf("<"));
 						
 						Pattern p = Pattern.compile("CorrelationID>([a-zA-Z0-9]*)<");
@@ -329,7 +310,7 @@ public class RequestListener extends TowContextListenerBase {
 					    	to = m.group(1).replaceAll(" ", "");
 					    }
 					    
-					    log.info(correlationID+"  "+from+" "+to);
+					    log.debug(correlationID+"  "+from+" "+to);
 
 						String response = getTows(from,to);
 						String msg = String.format(template, correlationID, getTowingsXML(response));
@@ -337,7 +318,7 @@ public class RequestListener extends TowContextListenerBase {
 						try {
 							MSender send = new MSender(ibmoutqueue, host, qm, channel,  port,  user,  pass);
 							send.mqPut(msg);
-							log.info("Request Response Sent");
+							log.trace("Request Response Sent");
 						} catch (Exception e) {
 							log.error("Request Response Send Error");
 							log.error(e.getMessage());

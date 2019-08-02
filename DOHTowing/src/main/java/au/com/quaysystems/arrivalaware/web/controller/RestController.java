@@ -5,8 +5,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 @org.springframework.web.bind.annotation.RestController
 public class RestController {
 
-
-
 	@Value("${fromMin:-1440}")
 	private int fromMin;
 	
@@ -42,12 +40,8 @@ public class RestController {
 	
 	@GetMapping(value = "/info")
 	public String getRaw() {
-		
-		String info = String.format("Default From Time Offset (min): %s<br/> Default To Time Offset (min): %s<br/>", fromMin, toMin);
-		
+		// Just returns all the active configuration parameters
+		String info = String.format("Default From Time Offset (min): %s<br/> Default To Time Offset (min): %s<br/>", fromMin, toMin);	
 		return info;
-		
 	}
-	
-
 }
