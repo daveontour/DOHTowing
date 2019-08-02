@@ -29,11 +29,11 @@ public class MSender extends MBase{
 	}
 	public MSender(String q, String host, String qm, String channel, int port, String user, String pass) {
 		
-		MQEnvironment.hostname = host;
-		MQEnvironment.channel = channel;
-		MQEnvironment.port = port;
-		MQEnvironment.userID = user;
-		MQEnvironment.password = pass;
+//		MQEnvironment.hostname = host;
+//		MQEnvironment.channel = channel;
+//		MQEnvironment.port = port;
+//		MQEnvironment.userID = user;
+//		MQEnvironment.password = pass;
 
 		qName = q;
 		try {

@@ -17,11 +17,11 @@ public class MReceiver extends MBase{
 
 	public MReceiver(String q, String host, String qm, String channel, int port, String user, String pass) throws MQException {
 		
-		MQEnvironment.hostname = host;
-		MQEnvironment.channel = channel;
-		MQEnvironment.port = port;
-		MQEnvironment.userID = user;
-		MQEnvironment.password = pass;
+//		MQEnvironment.hostname = host;
+//		MQEnvironment.channel = channel;
+//		MQEnvironment.port = port;
+//		MQEnvironment.userID = user;
+//		MQEnvironment.password = pass;
 		
 		queueName = q;
 		qMgr = new MQQueueManager(qm);

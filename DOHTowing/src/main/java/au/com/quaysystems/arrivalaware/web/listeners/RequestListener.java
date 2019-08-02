@@ -29,6 +29,11 @@ import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.methods.RequestBuilder;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+import org.basex.core.Context;
+import org.basex.query.QueryException;
+import org.basex.query.QueryProcessor;
+import org.basex.query.iter.Iter;
+import org.basex.query.value.item.Item;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
@@ -107,23 +112,33 @@ public class RequestListener implements ServletContextListener {
 	private String user;
 	@Value("${mq.pass}")
 	private String pass;
+	
+	private String template = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n" + 
+			" <soap:Header correlationID=\"%s\"></soap:Header>\r\n" + 
+			" <soap:Body>\r\n" + 
+			"  <ArrayOfTowing xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n" + 
+			"   %s\r\n"+
+			"  </ArrayOfTowing>\r\n" + 
+			" </soap:Body>\r\n" + 
+			"</soap:Envelope>";
 
+	private String syncTemplate = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n" + 
+			" <soap:Header correlationID=\"-\"><Sync>true</Sync></soap:Header>\r\n" + 
+			" <soap:Body>\r\n" + 
+			"  <ArrayOfTowing xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n" + 
+			"   %s\r\n"+
+			"  </ArrayOfTowing>\r\n" + 
+			" </soap:Body>\r\n" + 
+			"</soap:Envelope>";
+	
+	String queryBody = 
+			"declare variable $var1 as xs:string external;\n"+
+			"for $x in fn:parse-xml($var1)//Towing\r\n" + 
+			"return $x";
 	private final DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss");
 
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
-		
-//		// Initialize the flight repository
-//		flightRepo.initFlights();
-		
-		try {
-			String flt = ams.getFlight();
-			System.out.println(prettyFormat(flt,2));
-		} catch (DatatypeConfigurationException | JAXBException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-
 		
 		// Set the configured logging level
 		this.setLogLevel();
@@ -133,7 +148,12 @@ public class RequestListener implements ServletContextListener {
 		
 		// Initialize the output queue by sending the current set of tows
 		log.info("===> Start Of Initial Population");
-		this.getAndSendTows();
+		try {
+			this.getAndSendTows();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		log.info("<=== End Of Initial Population");
 		
 		// Start the listener for incoming requests
@@ -179,7 +199,12 @@ public class RequestListener implements ServletContextListener {
 		TimerTask dailyTask = new TimerTask() {
 			public void run() {
 				log.info("DAILY REFRESH TASK - START");
-				getAndSendTows();
+				try {
+					getAndSendTows();
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 				log.info("DAILY REFRESH TASK - COMPLETE");
 			}
 		};
@@ -210,7 +235,7 @@ public class RequestListener implements ServletContextListener {
 		
 	}
 	
-	public boolean getAndSendTows(){
+	public boolean getAndSendTows() throws Exception{
 		
 		DateTime dt = new DateTime();
 		DateTime fromTime = new DateTime(dt.plusMinutes(fromMin));
@@ -229,10 +254,25 @@ public class RequestListener implements ServletContextListener {
 			e1.printStackTrace();
 			return false;
 		} 
+		
+		String towings = "";
+		Context context = new Context();
+		try (QueryProcessor proc = new QueryProcessor(queryBody, context)) {
+			proc.bind("var1", response);
+			Iter iter = proc.iter();
+			for (Item item; (item = iter.next()) != null;) {
+				String tow = item.serialize().toString();
+				String rego = "<Registration>"+getRegistration(tow)+"</Registration>";
+				tow = tow.replaceAll("</FlightIdentifier>", rego+"\n</FlightIdentifier>");						
+				towings = towings.concat(tow).concat("\r\n");
+			}
+		}
+		
+		String msg = String.format(syncTemplate, towings);
 
 		try {
 			MSender send = new MSender(ibmoutqueue, host, qm, channel,  port,  user,  pass);
-			send.mqPut(response);
+			send.mqPut(msg);
 			log.info("Sync Sent");
 			return true;
 		} catch (Exception e) {
@@ -322,7 +362,7 @@ public class RequestListener implements ServletContextListener {
 
 
 				boolean continueOK = true;
-				XSLTransformService xft = new XSLTransformService("request.xsl");
+//				XSLTransformService xft = new XSLTransformService("request.xsl");
 
 				do {
 					try {
@@ -373,12 +413,27 @@ public class RequestListener implements ServletContextListener {
 					    log.info(correlationID+"  "+from+" "+to);
 
 						String response = getTows(from,to);
-						response = xft.transform(response);
-						response = String.format(response, correlationID);
+
+						
+						String towings = "";
+						Context context = new Context();
+						try (QueryProcessor proc = new QueryProcessor(queryBody, context)) {
+							proc.bind("var1", response);
+							Iter iter = proc.iter();
+							for (Item item; (item = iter.next()) != null;) {
+								String tow = item.serialize().toString();
+								String rego = "<Registration>"+getRegistration(tow)+"</Registration>";
+								tow = tow.replaceAll("</FlightIdentifier>", rego+"\n</FlightIdentifier>");						
+								towings = towings.concat(tow).concat("\r\n");
+							}
+						}
+						
+						String msg = String.format(template, correlationID, towings);
+						System.out.println(prettyFormat(msg,2));
 
 						try {
 							MSender send = new MSender(ibmoutqueue, host, qm, channel,  port,  user,  pass);
-							send.mqPut(response);
+							send.mqPut(msg);
 							log.info("Request Response Sent");
 						} catch (Exception e) {
 							log.error("Request Response Send Error");
@@ -394,6 +449,46 @@ public class RequestListener implements ServletContextListener {
 			} while (true);
 		}
 	}
+	
+	private String getRegistration(String notif) {
+		
+	    Pattern pDescriptor = Pattern.compile("<FlightDescriptor>(.*)</FlightDescriptor>");
+	    Pattern pReg = Pattern.compile("<Registration>([a-zA-Z0-9]*)</Registration>");
+	    String reg = "Not Available";
+
+
+	    //Extract the flight descriptor
+	    Matcher m = pDescriptor.matcher(notif);
+	    String flightID = null;
+	    if (m.find()) {
+	    	flightID = m.group(1);
+	    }
+	    
+	    if (flightID == null) {
+	    	return reg;
+	    }
+	    
+	    try {
+	    	// Use the AMS Web Services to get the flight using the flight descriptor
+			String flt = ams.getFlight(flightID);
+			if (flt == null) {
+				return reg;
+			} 
+			
+			// Extract the registration from the flight record returned from AMS
+		    Matcher mReg = pReg.matcher(flt);
+		    if (mReg.find()) {
+		    	reg = mReg.group(1);
+		    }
+		    return reg;
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+			return reg;
+		}
+
+	}
+
 	
 	public static String prettyFormat(String input, int indent) {
 	    try {

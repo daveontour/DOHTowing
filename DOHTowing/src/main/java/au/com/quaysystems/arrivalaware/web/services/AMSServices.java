@@ -107,9 +107,9 @@ public class AMSServices {
 		
 		return stripNS(callWebService("http://www.sita.aero/ams6-xml-api-webservice/IAMSIntegrationService/GetFlights", request));
 	}
-	public String getFlight( ) throws DatatypeConfigurationException, JAXBException {
+	public String getFlight( String id) throws DatatypeConfigurationException, JAXBException {
 
-		String id = "6E1713@2019-08-01T09:00A";
+	//	String id = "6E1713@2019-08-01T09:00A";
 		
 		FlightId fltID = new FlightId();
 		
