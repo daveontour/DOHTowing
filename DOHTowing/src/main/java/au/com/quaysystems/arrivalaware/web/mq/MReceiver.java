@@ -16,19 +16,33 @@ public class MReceiver extends MBase{
 	public String queueName;
 
 	public MReceiver(String q, String host, String qm, String channel, int port, String user, String pass) throws MQException {
-		
-//		MQEnvironment.hostname = host;
-//		MQEnvironment.channel = channel;
-//		MQEnvironment.port = port;
-//		MQEnvironment.userID = user;
-//		MQEnvironment.password = pass;
-		
+
+		if (!host.contains("NONE")) {
+			MQEnvironment.hostname = host;
+		}
+		if (!channel.contains("NONE")) {
+			MQEnvironment.channel = channel;
+		}
+		if (port != 0) {
+			MQEnvironment.port = port;
+		}
+		if (!user.contains("NONE")) {
+			MQEnvironment.userID = user;
+		}
+		if (!pass.contains("NONE")) {
+			MQEnvironment.password = pass;
+		}
+		if (!host.contains("NONE")) {
+			MQEnvironment.hostname = host;
+		}
+
+
 		queueName = q;
 		qMgr = new MQQueueManager(qm);
 		int openOptions =  MQConstants.MQOO_INQUIRE | MQConstants.MQOO_INPUT_AS_Q_DEF;
 		queue = qMgr.accessQueue(q, openOptions, null, null, null);
-		
-		
+
+
 	}
 
 

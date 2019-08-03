@@ -151,6 +151,11 @@ public class RequestListener extends TowContextListenerBase {
 			public void run() {
 				log.info("DAILY REFRESH TASK - START");
 				try {
+					MSender send = new MSender(ibmoutqueue, host, qm, channel,  port,  user,  pass);
+					
+					//Clear the queue since this is a refresh
+					
+					send.clearQueue();
 					getAndSendTows();
 					log.info("DAILY REFRESH TASK - COMPLETE");
 				} catch (Exception e) {
@@ -232,7 +237,8 @@ public class RequestListener extends TowContextListenerBase {
 	public String getTowingsXML(String input) {
 		String towings = "";
 		Context context = new Context();
-		try (QueryProcessor proc = new QueryProcessor(queryBody, context)) {
+		try  {
+			QueryProcessor proc = new QueryProcessor(queryBody, context);
 			proc.bind("var1", input);
 			Iter iter = proc.iter();
 			for (Item item; (item = iter.next()) != null;) {
@@ -241,6 +247,7 @@ public class RequestListener extends TowContextListenerBase {
 				tow = tow.replaceAll("</FlightIdentifier>", rego+"\n</FlightIdentifier>");						
 				towings = towings.concat(tow).concat("\r\n");				
 			}
+			proc.close();
 		} catch (Exception ex) {
 			return "";
 		}

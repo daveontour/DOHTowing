@@ -12,10 +12,17 @@
 	<groupId>au.com.quaysystems.towing</groupId>
 	<artifactId>TowingInterface</artifactId>
 	<version>1.0.0</version>
-	<packaging>jar</packaging>
+	<packaging>war</packaging>
 	<name>Towings</name>
 	<description>Web App to implement the Towing Interface</description>
 
+  <repositories>
+    <repository>
+      <id>basex</id>
+      <url>http://files.basex.org/maven/</url>
+    </repository>
+
+  </repositories>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -30,6 +37,22 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web-services</artifactId>
+
+			<exclusions>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-tomcat</artifactId>
+				</exclusion>
+			</exclusions>
+
+
+		</dependency>
+
+
+		<dependency>
+			<groupId>javax.servlet</groupId>
+			<artifactId>javax.servlet-api</artifactId>
+			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
@@ -87,7 +110,8 @@
 		<dependency>
 			<groupId>org.basex</groupId>
 			<artifactId>basex</artifactId>
-			<version>9.2.2</version>
+			<!-- This is a less than the current version. THe latest available on Maven Central has a problem with zipped filesystem -->
+			<version>7.9</version>
 		</dependency>
 
 		<dependency>
