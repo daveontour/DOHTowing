@@ -68,24 +68,24 @@ public class RequestListener extends TowContextListenerBase {
 
 	private static final Logger log = (Logger)LoggerFactory.getLogger(RequestListener.class);
 
-	@Value("${fromMin:-1440}")
-	private int fromMin;
-	
-	@Value("${toMin:1440}")
-	private int toMin;
-	
-	@Value("${token}")
-	private String token;
-
-	@Value("${mq.ibminqueue}")
-	private String ibminqueue;
-
-	@Value("${towrequest.url:http://localhost:80/api/v1/DOH/Towings/%s/%s}")
-	private String towRequestURL;
-
-	@Value("${daily.refresh.time:05:00}")
-	private String refreshTimeStr;
-	
+//	@Value("${fromMin:-1440}")
+//	private int fromMin;
+//	
+//	@Value("${toMin:1440}")
+//	private int toMin;
+//	
+//	@Value("${token}")
+//	private String token;
+//
+//	@Value("${mq.ibminqueue}")
+//	private String ibminqueue;
+//
+//	@Value("${towrequest.url:http://localhost:80/api/v1/DOH/Towings/%s/%s}")
+//	private String towRequestURL;
+//
+//	@Value("${daily.refresh.time:05:00}")
+//	private String refreshTimeStr;
+//	
 	
 	private String template = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n" + 
 			" <soap:Header correlationID=\"%s\"></soap:Header>\r\n" + 
@@ -114,8 +114,8 @@ public class RequestListener extends TowContextListenerBase {
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
 		
-		// Set the configured logging level
-		this.setLogLevel();
+		super.contextInitialized(servletContextEvent);
+		
 		
 		// Schedule the daily sync
 		this.dailyRefresh();

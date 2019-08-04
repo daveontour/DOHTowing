@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: my-app-name
+  jmx:
+    default-domain: my-app-name

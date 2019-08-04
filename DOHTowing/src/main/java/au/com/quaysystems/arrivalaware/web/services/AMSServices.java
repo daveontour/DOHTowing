@@ -29,8 +29,6 @@ import au.com.quaysystems.arrivalaware.web.ws.GetFlight;
 import au.com.quaysystems.arrivalaware.web.ws.LookupCode;
 import au.com.quaysystems.arrivalaware.web.ws.ObjectFactory;
 
-
-@Service
 public class AMSServices {
 
 	private final Logger log = LoggerFactory.getLogger(AMSServices.class);
@@ -44,9 +42,9 @@ public class AMSServices {
 	private AirportIdentifierType apType = AirportIdentifierType.IATA_CODE;
 
 	public AMSServices(
-			@Value("${token}")String toke,
-			@Value("${airport}")String ap,
-			@Value("${wsurl:http://localhost/SITAAMSIntegrationService/v2/SITAAMSIntegrationService}")String wsURL)  {
+			String toke,
+			String ap,
+			String wsURL)  {
 		
 		fact = new ObjectFactory();
 		marshaller = new Jaxb2Marshaller();

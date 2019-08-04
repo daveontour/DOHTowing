@@ -1,5 +1,9 @@
 package au.com.quaysystems.arrivalaware.web.listeners;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -9,57 +13,124 @@ import javax.servlet.ServletContextListener;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
 
 import au.com.quaysystems.arrivalaware.web.mq.MReceiver;
 import au.com.quaysystems.arrivalaware.web.services.AMSServices;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 
-
+@Configuration   
+@PropertySource("classpath:application.properties")//location of your property file
 public class TowContextListenerBase implements ServletContextListener {
 
 
 	protected static final Logger log = (Logger)LoggerFactory.getLogger(TowContextListenerBase.class);
 	
-	@Autowired
+
 	public AMSServices ams;
 
 	protected Thread t;
 
-	@Value("${mq.msmqbridgequeue}")
-	protected String msmqbridge;
-	
-	@Value("${mq.ibmoutqueue}")
-	protected String ibmoutqueue;
-
-	@Value("${msg.recv.timeout:5000}")
-	protected int msgRecvTimeout;
-
-	@Value("${monitor.period:60000}")
-	protected long monitorPeriod;
-
-	@Value("${ibmmq.retries:0}")
-	protected int retriesIBMMQ;
-	
-	@Value("${log.level:INFO}")
 	protected String logLevel;
 
-	@Value("${mq.host}")
+	protected int fromMin;
+	protected int toMin;
+	protected String token;
+	protected String ibminqueue;
+
+	protected String towRequestURL;
+
+	protected String refreshTimeStr;
+	protected String msmqbridge;
+	protected String ibmoutqueue;
+
+	
+	protected int msgRecvTimeout;
+	protected int retriesIBMMQ;
+	
 	protected String host;
-	@Value("${mq.qmgr}")
 	protected String qm;
-	@Value("${mq.channel}")
 	protected String channel;
-	@Value("${mq.port}")
 	protected int port;
-	@Value("${mq.user}")
 	protected String user;
-	@Value("${mq.pass}")
 	protected String pass;
+	
+	protected String airport;
+	protected String wsurl;
+	
+
+	protected Properties props;
 
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
+		
+		try {
+			props = getProperties();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		logLevel = props.getProperty("log.level", "INFO");
+		refreshTimeStr = props.getProperty("daily.refresh.time","5:00");
+		toMin = Integer.parseInt(props.getProperty("toMin", "1400"));
+		fromMin = Integer.parseInt(props.getProperty("fromMin", "-1400"));
+		token = props.getProperty("token");
+		ibminqueue = props.getProperty("mq.ibminqueue");
+		ibmoutqueue = props.getProperty("mq.ibmoutqueue");
+		
+		host = props.getProperty("mq.host");
+		qm = props.getProperty("mq.qmgr");
+		channel = props.getProperty("mq.channel");
+		port = Integer.parseInt(props.getProperty("mq.port"));
+		user = props.getProperty("mq.user");
+		pass = props.getProperty("mq.pass");
+
+		
+		msgRecvTimeout = Integer.parseInt(props.getProperty("msg.recv.timeout", "5000"));
+		retriesIBMMQ = Integer.parseInt(props.getProperty("ibmmq.retries", "0"));
+
+		msmqbridge = props.getProperty("mq.msmqbridgequeue");
+		ibmoutqueue = props.getProperty("mq.ibmoutqueue");
+
+		towRequestURL = props.getProperty("towrequest.url", "http://localhost:80/api/v1/DOH/Towings/%s/%s");
+		
+		airport = props.getProperty("airport");
+		wsurl = props.getProperty("ws.url");
+		
+		this.ams = new AMSServices(token, airport, wsurl);
+		
+		// Set the configured logging level
+		this.setLogLevel();
+
+		
 		return;
+	}
+	
+	public Properties getProperties() throws IOException {
+		 
+		InputStream inputStream = null;
+		Properties props = new Properties();
+
+		try {
+			String propFileName = "application.properties";
+ 
+			inputStream = getClass().getClassLoader().getResourceAsStream(propFileName);
+ 
+			if (inputStream != null) {
+				props.load(inputStream);
+			} else {
+				throw new FileNotFoundException("property file '" + propFileName + "' not found in the classpath");
+			}
+ 
+ 		} catch (Exception e) {
+			System.out.println("Exception: " + e);
+		} finally {
+			inputStream.close();
+		}
+		return props;
 	}
 	
 

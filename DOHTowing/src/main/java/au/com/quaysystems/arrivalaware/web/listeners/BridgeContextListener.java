@@ -3,6 +3,10 @@ package au.com.quaysystems.arrivalaware.web.listeners;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.annotation.WebListener;
 
+import org.basex.core.Context;
+import org.basex.query.QueryProcessor;
+import org.basex.query.iter.Iter;
+import org.basex.query.value.item.Item;
 import org.slf4j.LoggerFactory;
 
 import com.ibm.mq.MQException;
@@ -10,7 +14,6 @@ import com.ibm.mq.constants.MQConstants;
 
 import au.com.quaysystems.arrivalaware.web.mq.MReceiver;
 import au.com.quaysystems.arrivalaware.web.mq.MSender;
-import au.com.quaysystems.arrivalaware.web.services.XSLTransformService;
 import ch.qos.logback.classic.Logger;
 
 /*
@@ -22,9 +25,6 @@ import ch.qos.logback.classic.Logger;
  * than a parser. Elements are added by String substitution. This was deliberate to try keep it as light-weight
  * as possible. 
  * 
- * An XSL transformation is used for transforming the incoming message to the required output. It could be done 
- * with a template and string substitution but I've done it for my own amusement
- * 
  * Uses method in the base class to extract flight descriptor for towing message and get registration for AMS
  */
 @WebListener
@@ -33,11 +33,23 @@ public class BridgeContextListener extends TowContextListenerBase {
 
 	private static final Logger log = (Logger)LoggerFactory.getLogger(BridgeContextListener.class);
 	
+	private String notifTemplate = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\">\r\n" + 
+			"  <soap:Header></soap:Header>\r\n" + 
+			"  <soap:Body>\r\n" + 
+			"	%s\r\n" + 
+			"  </soap:Body>\r\n" + 
+			" </soap:Envelope>";
+	
+	// Used by BaseX to extract the portion of the message we are interested in
+	String queryBody = 
+			"declare variable $var1 as xs:string external;\n"+
+			"for $x in fn:parse-xml($var1)//Notification\r\n" + 
+			"return $x";
+	
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
 		
-		// Set the configured logging level
-		this.setLogLevel();
+		super.contextInitialized(servletContextEvent);
 		
 		// Start the listener for incoming notification
 		this.startListener();
@@ -69,8 +81,6 @@ public class BridgeContextListener extends TowContextListenerBase {
 
 				boolean continueOK = true;
 				
-				XSLTransformService xft = new XSLTransformService("notifications.xsl");
-
 				do {
 					try {
 
@@ -85,7 +95,21 @@ public class BridgeContextListener extends TowContextListenerBase {
 						}
 						log.trace("Message Received");
 						message = message.substring(message.indexOf("<")).replace("xsi:type", "type");
-						String notification = xft.transform(message);
+						String notification = "<Error>true</Error>";
+						Context context = new Context();
+						try  {
+							QueryProcessor proc = new QueryProcessor(queryBody, context);
+							proc.bind("var1", message);
+							Iter iter = proc.iter();
+							for (Item item; (item = iter.next()) != null;) {
+								notification  = item.serialize().toString();
+							}
+							proc.close();
+						} catch (Exception ex) {
+							notification = "<Error>true</Error>";
+						}
+
+						notification = String.format(notifTemplate, notification);
 						notification = notification.replace("xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"", "");
 						String rego = "<Registration>"+getRegistration(notification)+"</Registration>";
 						notification = notification.replaceAll("</FlightIdentifier>", rego+"\n</FlightIdentifier>");						
@@ -101,7 +125,6 @@ public class BridgeContextListener extends TowContextListenerBase {
 						}
 					} catch (Exception e) {
 						log.error("Unhandled Exception "+e.getMessage());
-						e.printStackTrace();
 						recv.disconnect();
 						continueOK = false;
 					}
