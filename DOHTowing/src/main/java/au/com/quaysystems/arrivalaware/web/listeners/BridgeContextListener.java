@@ -30,9 +30,6 @@ import ch.qos.logback.classic.Logger;
 @WebListener
 public class BridgeContextListener extends TowContextListenerBase {
 
-
-	private static final Logger log = (Logger)LoggerFactory.getLogger(BridgeContextListener.class);
-	
 	private String notifTemplate = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\">\r\n" + 
 			"  <soap:Header></soap:Header>\r\n" + 
 			"  <soap:Body>\r\n" + 
@@ -48,7 +45,7 @@ public class BridgeContextListener extends TowContextListenerBase {
 	
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
-		
+		log = (Logger)LoggerFactory.getLogger(BridgeContextListener.class);
 		super.contextInitialized(servletContextEvent);
 		
 		// Start the listener for incoming notification
@@ -69,12 +66,11 @@ public class BridgeContextListener extends TowContextListenerBase {
 
 		public void run() {
 
-			do {
-				
+			do {				
 				MReceiver recv = connectToMQ(msmqbridge);
 				if (recv == null) {
 					log.error(String.format("Exceeded IBM MQ connect retry limit {%s}. Exiting", retriesIBMMQ));
-					return;
+					continue;
 				}
 
 				log.info(String.format("Conected to queue %s", msmqbridge));
@@ -83,7 +79,6 @@ public class BridgeContextListener extends TowContextListenerBase {
 				
 				do {
 					try {
-
 						String message = null;
 						try {
 							message = recv.mGet(msgRecvTimeout, true);
@@ -111,6 +106,8 @@ public class BridgeContextListener extends TowContextListenerBase {
 
 						notification = String.format(notifTemplate, notification);
 						notification = notification.replace("xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"", "");
+						
+						// Get the registration of the flight by extracting flight details and calling a web service to get the flight 
 						String rego = "<Registration>"+getRegistration(notification)+"</Registration>";
 						notification = notification.replaceAll("</FlightIdentifier>", rego+"\n</FlightIdentifier>");						
 						log.trace("Message Processed");

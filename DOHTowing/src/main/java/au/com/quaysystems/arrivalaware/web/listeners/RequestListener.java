@@ -22,10 +22,11 @@ import org.basex.query.QueryProcessor;
 import org.basex.query.iter.Iter;
 import org.basex.query.value.item.Item;
 import org.joda.time.DateTime;
+import org.joda.time.Period;
+import org.joda.time.PeriodType;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 
 import com.ibm.mq.MQException;
 import com.ibm.mq.constants.MQConstants;
@@ -38,7 +39,7 @@ import ch.qos.logback.classic.Logger;
  * Two Purposes:
  * 
  * 1. Listen for incoming request on the input queue for Tows within a specificed period
- * 2. Schedule the daily resync.
+ * 2. Schedule the periodic resync which by defualt is daily
  * 
  * Also does the sync on startup.
  * 
@@ -65,28 +66,6 @@ import ch.qos.logback.classic.Logger;
 @WebListener
 public class RequestListener extends TowContextListenerBase {
 
-
-	private static final Logger log = (Logger)LoggerFactory.getLogger(RequestListener.class);
-
-//	@Value("${fromMin:-1440}")
-//	private int fromMin;
-//	
-//	@Value("${toMin:1440}")
-//	private int toMin;
-//	
-//	@Value("${token}")
-//	private String token;
-//
-//	@Value("${mq.ibminqueue}")
-//	private String ibminqueue;
-//
-//	@Value("${towrequest.url:http://localhost:80/api/v1/DOH/Towings/%s/%s}")
-//	private String towRequestURL;
-//
-//	@Value("${daily.refresh.time:05:00}")
-//	private String refreshTimeStr;
-//	
-	
 	private String template = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n" + 
 			" <soap:Header correlationID=\"%s\"></soap:Header>\r\n" + 
 			" <soap:Body>\r\n" + 
@@ -114,11 +93,12 @@ public class RequestListener extends TowContextListenerBase {
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
 		
+		log = (Logger)LoggerFactory.getLogger(RequestListener.class);
 		super.contextInitialized(servletContextEvent);
 		
 		
-		// Schedule the daily sync
-		this.dailyRefresh();
+		// Schedule the periodic sync
+		this.periodicRefresh();
 		
 		// Initialize the output queue by sending the current set of tows
 		log.info("===> Start Of Initial Population");
@@ -143,9 +123,10 @@ public class RequestListener extends TowContextListenerBase {
 		log.info("<=== Request Listner Loop Started");
 	}
 	
-	public void dailyRefresh() {
+	public void periodicRefresh() {
 		
-		log.info("===> Scheduling daily resync");
+		log.info("===> Scheduling period resync");
+		log.info("Time between resync events = "+ refreshPeriod + "(ms)");
 		
 		TimerTask dailyTask = new TimerTask() {
 			public void run() {
@@ -154,13 +135,15 @@ public class RequestListener extends TowContextListenerBase {
 					MSender send = new MSender(ibmoutqueue, host, qm, channel,  port,  user,  pass);
 					
 					//Clear the queue since this is a refresh
-					
-					send.clearQueue();
+					if (deleteBeforeSync) {
+						send.clearQueue();
+					}
+
 					getAndSendTows();
-					log.info("DAILY REFRESH TASK - COMPLETE");
+					log.info("PERIODIC REFRESH TASK - COMPLETE");
 				} catch (Exception e) {
 					e.printStackTrace();
-					log.error("DAILY REFRESH TASK - UNSUCCESSFUL");
+					log.error("PERIODIC REFRESH TASK - UNSUCCESSFUL");
 				}
 			}
 		};
@@ -173,20 +156,24 @@ public class RequestListener extends TowContextListenerBase {
 				.withSecondOfMinute(0)
 				.withMillisOfSecond(0);
 		
-		// Change time to tomorrow if the scheduled time for today has already passed
-		if (sched.isBeforeNow()) {
-			sched = sched.plusDays(1);
-		}
-			
+		// Change time to the scheduled time based on the refresh period
+		while (sched.isBeforeNow()) {
+			sched = sched.plusMillis(refreshPeriod);
+		}	
 
-		Timer timer = new Timer("Daily Refresh");
+		DateTime now = new DateTime();
+		
+		Period p = new Period(now, sched, PeriodType.millis());
+		long delay = Math.abs(p.getValue(0));
+		
+		Timer timer = new Timer("Periodic Refresh");
 		timer.schedule(
 		  dailyTask,
-		  sched.toDate().getTime(),
-		  1000 * 60 * 60 * 24
+		  delay,
+		  refreshPeriod
 		);
 
-		log.info("<=== Daily Sync Scheduled at: "+sched.toDate().toString());
+		log.info("<=== First Periodic Sync Scheduled at: "+sched.toDate().toString()+" with refresh of "+refreshPeriod+"(ms)");
 	}
 	
 	public boolean getAndSendTows() throws Exception{

@@ -10,7 +10,7 @@ public class MBase {
 
 	protected static MQQueueManager qMgr;
 	public MQQueue queue;
-	protected FatUtil config = FatUtil.getFatUtil();
+//	protected FatUtil config = FatUtil.getFatUtil();
 	protected boolean disconected = true;
 
 	public int getQueueDepth() {
@@ -65,8 +65,6 @@ public class MBase {
 	public boolean clearQueue()  {
 
 		boolean loopAgain = true;
-
-
 
 		try {
 

@@ -10,26 +10,17 @@ import java.util.regex.Pattern;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.PropertySource;
-
 import au.com.quaysystems.arrivalaware.web.mq.MReceiver;
 import au.com.quaysystems.arrivalaware.web.services.AMSServices;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+  
 
-@Configuration   
-@PropertySource("classpath:application.properties")//location of your property file
 public class TowContextListenerBase implements ServletContextListener {
 
 
-	protected static final Logger log = (Logger)LoggerFactory.getLogger(TowContextListenerBase.class);
-	
-
-	public AMSServices ams;
+	protected Logger log;
+	protected AMSServices ams;
 
 	protected Thread t;
 
@@ -45,7 +36,6 @@ public class TowContextListenerBase implements ServletContextListener {
 	protected String refreshTimeStr;
 	protected String msmqbridge;
 	protected String ibmoutqueue;
-
 	
 	protected int msgRecvTimeout;
 	protected int retriesIBMMQ;
@@ -60,12 +50,15 @@ public class TowContextListenerBase implements ServletContextListener {
 	protected String airport;
 	protected String wsurl;
 	
+	protected boolean deleteBeforeSync;
+	protected int refreshPeriod;
 
 	protected Properties props;
 
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
-		
+				
+		// Load all the properties used by the sub classes
 		try {
 			props = getProperties();
 		} catch (IOException e) {
@@ -87,7 +80,6 @@ public class TowContextListenerBase implements ServletContextListener {
 		port = Integer.parseInt(props.getProperty("mq.port"));
 		user = props.getProperty("mq.user");
 		pass = props.getProperty("mq.pass");
-
 		
 		msgRecvTimeout = Integer.parseInt(props.getProperty("msg.recv.timeout", "5000"));
 		retriesIBMMQ = Integer.parseInt(props.getProperty("ibmmq.retries", "0"));
@@ -99,6 +91,10 @@ public class TowContextListenerBase implements ServletContextListener {
 		
 		airport = props.getProperty("airport");
 		wsurl = props.getProperty("ws.url");
+		
+		deleteBeforeSync = Boolean.parseBoolean(props.getProperty("deleteBeforeSync", "false"));
+		
+		refreshPeriod = Integer.parseInt(props.getProperty("refresh.period", "86400000"));
 		
 		this.ams = new AMSServices(token, airport, wsurl);
 		
@@ -187,8 +183,13 @@ public class TowContextListenerBase implements ServletContextListener {
 
 	public String getRegistration(String notif) {
 		
+		// Pattern for getting the flight descriptor from the input message
 	    Pattern pDescriptor = Pattern.compile("<FlightDescriptor>(.*)</FlightDescriptor>");
+	    
+	    // Pattern for getting the registration from the return flight record
 	    Pattern pReg = Pattern.compile("<Registration>([a-zA-Z0-9]*)</Registration>");
+	    
+	    // If any errors occur or registration not available
 	    String reg = "Not Available";
 
 
@@ -214,11 +215,18 @@ public class TowContextListenerBase implements ServletContextListener {
 		    Matcher mReg = pReg.matcher(flt);
 		    if (mReg.find()) {
 		    	reg = mReg.group(1);
+		    	
+		    	// If we get here, the registration has been found
+		    	return reg;
 		    }
+		    
+		    // If we get here, the registration was not found, so just returning the default
 		    return reg;
 			
 		} catch (Exception e) {
 			e.printStackTrace();
+			
+			// Any errors in looking for the registration returns default
 			return reg;
 		}
 
