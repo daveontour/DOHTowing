@@ -52,6 +52,8 @@ public class TowContextListenerBase implements ServletContextListener {
 	
 	protected boolean deleteBeforeSync;
 	protected int refreshPeriod;
+	
+	protected boolean enablePush;
 
 	protected Properties props;
 
@@ -93,8 +95,10 @@ public class TowContextListenerBase implements ServletContextListener {
 		wsurl = props.getProperty("ws.url");
 		
 		deleteBeforeSync = Boolean.parseBoolean(props.getProperty("deleteBeforeSync", "false"));
+		enablePush = Boolean.parseBoolean(props.getProperty("enablePush", "false"));
 		
 		refreshPeriod = Integer.parseInt(props.getProperty("refresh.period", "86400000"));
+		
 		
 		this.ams = new AMSServices(token, airport, wsurl);
 		
@@ -190,7 +194,7 @@ public class TowContextListenerBase implements ServletContextListener {
 	    Pattern pReg = Pattern.compile("<Registration>([a-zA-Z0-9]*)</Registration>");
 	    
 	    // If any errors occur or registration not available
-	    String reg = "Not Available";
+	    String reg = "nil";
 
 
 	    //Extract the flight descriptor

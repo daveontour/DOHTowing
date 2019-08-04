@@ -98,7 +98,9 @@ public class RequestListener extends TowContextListenerBase {
 		
 		
 		// Schedule the periodic sync
-		this.periodicRefresh();
+		if (enablePush) {
+			this.periodicRefresh();
+		}
 		
 		// Initialize the output queue by sending the current set of tows
 		log.info("===> Start Of Initial Population");
