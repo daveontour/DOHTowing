@@ -54,6 +54,7 @@ public class TowContextListenerBase implements ServletContextListener {
 	protected int refreshPeriod;
 	
 	protected boolean enablePush;
+	protected boolean syncOnStartUp;
 
 	protected Properties props;
 
@@ -96,6 +97,7 @@ public class TowContextListenerBase implements ServletContextListener {
 		
 		deleteBeforeSync = Boolean.parseBoolean(props.getProperty("deleteBeforeSync", "false"));
 		enablePush = Boolean.parseBoolean(props.getProperty("enablePush", "false"));
+		syncOnStartUp = Boolean.parseBoolean(props.getProperty("syncOnStartUp", "true"));
 		
 		refreshPeriod = Integer.parseInt(props.getProperty("refresh.period", "86400000"));
 		

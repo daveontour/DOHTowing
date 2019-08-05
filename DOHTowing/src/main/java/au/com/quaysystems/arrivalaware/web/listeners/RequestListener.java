@@ -76,47 +76,49 @@ public class RequestListener extends TowContextListenerBase {
 			"</soap:Envelope>";
 
 	private String syncTemplate = "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\r\n" + 
-			" <soap:Header correlationID=\"-\"><Sync>true</Sync></soap:Header>\r\n" + 
+			" <soap:Header><Sync>true</Sync></soap:Header>\r\n" + 
 			" <soap:Body>\r\n" + 
 			"  <ArrayOfTowing xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n" + 
 			"   %s\r\n"+
 			"  </ArrayOfTowing>\r\n" + 
 			" </soap:Body>\r\n" + 
 			"</soap:Envelope>";
-	
+
 	String queryBody = 
 			"declare variable $var1 as xs:string external;\n"+
-			"for $x in fn:parse-xml($var1)//Towing\r\n" + 
-			"return $x";
+					"for $x in fn:parse-xml($var1)//Towing\r\n" + 
+					"return $x";
 	private final DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss");
 
 	@Override
 	public void contextInitialized(ServletContextEvent servletContextEvent) {
-		
+
 		log = (Logger)LoggerFactory.getLogger(RequestListener.class);
 		super.contextInitialized(servletContextEvent);
-		
-		
+
+
 		// Schedule the periodic sync
 		if (enablePush) {
 			this.periodicRefresh();
 		}
-		
+
 		// Initialize the output queue by sending the current set of tows
-		log.info("===> Start Of Initial Population");
-		try {
-			this.getAndSendTows();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		if (syncOnStartUp) {
+			log.info("===> Start Of Initial Population");
+			try {
+				this.getAndSendTows();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			log.info("<=== End Of Initial Population");
 		}
-		log.info("<=== End Of Initial Population");
-		
+
 		// Start the listener for incoming requests
 		this.startListener();
 
 	}
-	
+
 	public void startListener() {
 		log.info("===> Start Request Listner Loop");
 		t = new RequestListenerLoop();
@@ -124,18 +126,18 @@ public class RequestListener extends TowContextListenerBase {
 		t.start();
 		log.info("<=== Request Listner Loop Started");
 	}
-	
+
 	public void periodicRefresh() {
-		
+
 		log.info("===> Scheduling period resync");
 		log.info("Time between resync events = "+ refreshPeriod + "(ms)");
-		
+
 		TimerTask dailyTask = new TimerTask() {
 			public void run() {
 				log.info("DAILY REFRESH TASK - START");
 				try {
 					MSender send = new MSender(ibmoutqueue, host, qm, channel,  port,  user,  pass);
-					
+
 					//Clear the queue since this is a refresh
 					if (deleteBeforeSync) {
 						send.clearQueue();
@@ -149,7 +151,7 @@ public class RequestListener extends TowContextListenerBase {
 				}
 			}
 		};
-		
+
 		// Set the time that the daily sync runs
 		DateTime sched = new DateTime()
 				.withHourOfDay(Integer.parseInt(refreshTimeStr.split(":")[0]))
@@ -157,36 +159,36 @@ public class RequestListener extends TowContextListenerBase {
 				.withMinuteOfHour(0)
 				.withSecondOfMinute(0)
 				.withMillisOfSecond(0);
-		
+
 		// Change time to the scheduled time based on the refresh period
 		while (sched.isBeforeNow()) {
 			sched = sched.plusMillis(refreshPeriod);
 		}	
 
 		DateTime now = new DateTime();
-		
+
 		Period p = new Period(now, sched, PeriodType.millis());
 		long delay = Math.abs(p.getValue(0));
-		
+
 		Timer timer = new Timer("Periodic Refresh");
 		timer.schedule(
-		  dailyTask,
-		  delay,
-		  refreshPeriod
-		);
+				dailyTask,
+				delay,
+				refreshPeriod
+				);
 
 		log.info("<=== First Periodic Sync Scheduled at: "+sched.toDate().toString()+" with refresh of "+refreshPeriod+"(ms)");
 	}
-	
+
 	public boolean getAndSendTows() throws Exception{
-		
+
 		DateTime dt = new DateTime();
 		DateTime fromTime = new DateTime(dt.plusMinutes(fromMin));
 		DateTime toTime = new DateTime(dt.plusMinutes(toMin));
-		
+
 		String from = dtf.print(fromTime);
 		String to = dtf.print(toTime);
-		
+
 		String response = getTows(from,to);
 		String msg = String.format(syncTemplate, this.getTowingsXML(response));
 
@@ -201,17 +203,17 @@ public class RequestListener extends TowContextListenerBase {
 			return false;
 		}
 	}
-	
+
 	public String getTows(String from, String to) throws ClientProtocolException, IOException {
-		
+
 		String URI = String.format(towRequestURL, from, to);
-		
+
 		HttpClient client = HttpClientBuilder.create().build();
 		HttpUriRequest request = RequestBuilder.get()
 				.setUri(URI)
 				.setHeader("Authorization", token)
 				.build();
-		
+
 		HttpResponse response = client.execute(request);
 		int statusCode = response.getStatusLine().getStatusCode();
 
@@ -222,7 +224,7 @@ public class RequestListener extends TowContextListenerBase {
 			return "<Status>Failed</Failed>";
 		}				    
 	}
-	
+
 	public String getTowingsXML(String input) {
 		String towings = "";
 		Context context = new Context();
@@ -246,9 +248,9 @@ public class RequestListener extends TowContextListenerBase {
 	public class RequestListenerLoop extends Thread {
 
 		public void run() {
-			
+
 			do {
-				
+
 				MReceiver recv = connectToMQ(ibminqueue);
 				if (recv == null) {
 					log.error(String.format("Exceeded IBM MQ connect retry limit {%s}. Exiting", retriesIBMMQ));
@@ -274,39 +276,39 @@ public class RequestListener extends TowContextListenerBase {
 						}
 						log.trace("Request Message Received");
 						message = message.substring(message.indexOf("<"));
-						
+
 						Pattern p = Pattern.compile("CorrelationID>([a-zA-Z0-9]*)<");
-					    Matcher m = p.matcher(message);
-					    
-					    String correlationID = "-";
-					    if (m.find()) {
-					    	correlationID = m.group(1).replaceAll(" ", "");
-					    }
-					    
-					    
+						Matcher m = p.matcher(message);
+
+						String correlationID = "-";
+						if (m.find()) {
+							correlationID = m.group(1).replaceAll(" ", "");
+						}
+
+
 						DateTime dt = new DateTime();
 						DateTime fromTime = new DateTime(dt.plusMinutes(fromMin));
 						DateTime toTime = new DateTime(dt.plusMinutes(toMin));
-						
+
 						String from = dtf.print(fromTime);
 						String to = dtf.print(toTime);
-					    
-					    
-					    p = Pattern.compile("RangeFrom>(.*)<");
-					    m = p.matcher(message);
-					    
-					    if (m.find()) {
-					    	from = m.group(1).replaceAll(" ", "");
-					    }
 
-					    p = Pattern.compile("RangeTo>(.*)<");
-					    m = p.matcher(message);
-					    
-					    if (m.find()) {
-					    	to = m.group(1).replaceAll(" ", "");
-					    }
-					    
-					    log.debug(correlationID+"  "+from+" "+to);
+
+						p = Pattern.compile("RangeFrom>(.*)<");
+						m = p.matcher(message);
+
+						if (m.find()) {
+							from = m.group(1).replaceAll(" ", "");
+						}
+
+						p = Pattern.compile("RangeTo>(.*)<");
+						m = p.matcher(message);
+
+						if (m.find()) {
+							to = m.group(1).replaceAll(" ", "");
+						}
+
+						log.debug(correlationID+"  "+from+" "+to);
 
 						String response = getTows(from,to);
 						String msg = String.format(template, correlationID, getTowingsXML(response));
